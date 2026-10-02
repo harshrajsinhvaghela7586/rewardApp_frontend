@@ -51,14 +51,7 @@ export default function PersonalScreen({ navigation, route }) {
     const trimmedName = name.trim();
     const trimmedEmail = email.trim().toLowerCase();
 
-    // Mobile must be exactly 10 digits
-    if (!/^\d{10}$/.test(mobile)) {
-      Alert.alert(
-        'Invalid Mobile Number',
-        'Please enter a valid 10-digit mobile number.'
-      );
-      return;
-    }
+   
 
     if (!validName(trimmedName)) {
       Alert.alert(

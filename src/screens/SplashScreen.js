@@ -9,18 +9,29 @@ import {
   Animated,
   Easing,
   Image,
+  Pressable,
+  StatusBar,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { colors } from '../theme/theme';
-import AnimatedCar from '../components/AnimatedCar';
+import SplashScene from '../components/SplashScene';
 import { bannerApi } from '../services/api';
+
+// Road (neeche wala dark hissa) ki height; loading UI isi par aata hai
+const ROAD_HEIGHT = 190;
 
 export default function SplashScreen({
   navigation,
 }) {
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
   const progress =
     useRef(new Animated.Value(0)).current;
 
@@ -33,7 +44,7 @@ export default function SplashScreen({
   const taglineOpacity =
     useRef(new Animated.Value(0)).current;
 
-  const roadOpacity =
+  const loadingOpacity =
     useRef(new Animated.Value(0)).current;
 
   const [loadingText, setLoadingText] =
@@ -184,7 +195,7 @@ export default function SplashScreen({
       ),
 
       Animated.timing(
-        roadOpacity,
+        loadingOpacity,
         {
           toValue: 1,
           duration: 350,
@@ -310,7 +321,7 @@ export default function SplashScreen({
     logoOpacity,
     logoScale,
     taglineOpacity,
-    roadOpacity,
+    loadingOpacity,
   ]);
 
   /* =========================================
@@ -349,6 +360,15 @@ export default function SplashScreen({
 
   return (
     <View style={styles.container}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="transparent"
+        translucent
+      />
+
+      {/* ============ FULL-SCREEN SCENERY + DRIVING CAR ============ */}
+
+      <SplashScene roadHeight={ROAD_HEIGHT} />
 
       {/* ================= BRAND ================= */}
 
@@ -356,13 +376,11 @@ export default function SplashScreen({
         style={[
           styles.brand,
           {
-            opacity:
-              logoOpacity,
-
+            top: insets.top + height * 0.13,
+            opacity: logoOpacity,
             transform: [
               {
-                scale:
-                  logoScale,
+                scale: logoScale,
               },
             ],
           },
@@ -377,11 +395,7 @@ export default function SplashScreen({
             resizeMode="contain"
           />
 
-          <Text
-            style={
-              styles.brandName
-            }
-          >
+          <Text style={styles.brandName}>
             Vinsure
           </Text>
         </View>
@@ -390,8 +404,7 @@ export default function SplashScreen({
           style={[
             styles.tagline,
             {
-              opacity:
-                taglineOpacity,
+              opacity: taglineOpacity,
             },
           ]}
         >
@@ -400,133 +413,36 @@ export default function SplashScreen({
         </Animated.Text>
       </Animated.View>
 
-      {/* ================= ROAD SCENE ================= */}
+      {/* ================= LOADING (road ke upar) ================= */}
 
       <Animated.View
         style={[
-          styles.scene,
+          styles.loadingArea,
           {
-            opacity:
-              roadOpacity,
+            bottom: insets.bottom + 22,
+            opacity: loadingOpacity,
           },
         ]}
       >
-        {/* sky glow */}
-        <View
-          style={
-            styles.skyGlow
-          }
-        />
-
-        {/* small clouds */}
-        <View
-          style={[
-            styles.cloud,
-            styles.cloudOne,
-          ]}
-        />
-
-        <View
-          style={[
-            styles.cloud,
-            styles.cloudTwo,
-          ]}
-        />
-
-        {/* distant hills */}
-        <View
-          style={
-            styles.hillBack
-          }
-        />
-
-        <View
-          style={
-            styles.hillFront
-          }
-        />
-
-        {/* road */}
-        <View
-          style={styles.road}
-        />
-
-        {/* road markings */}
-        <View
-          style={
-            styles.roadMarks
-          }
-        >
-          <View
-            style={
-              styles.roadMark
-            }
-          />
-
-          <View
-            style={
-              styles.roadMark
-            }
-          />
-
-          <View
-            style={
-              styles.roadMark
-            }
-          />
-
-          <View
-            style={
-              styles.roadMark
-            }
-          />
-        </View>
-
-        {/* OUR CAR */}
-        <AnimatedCar />
-      </Animated.View>
-
-      {/* ================= LOADING ================= */}
-
-      <View
-        style={
-          styles.loadingArea
-        }
-      >
         {!loadingError ? (
           <>
-            <View
-              style={
-                styles.loaderRow
-              }
-            >
+            <View style={styles.loaderRow}>
               <ActivityIndicator
                 size="small"
-                color={
-                  colors.blue
-                }
+                color="#FFFFFF"
               />
 
-              <Text
-                style={
-                  styles.loadingText
-                }
-              >
+              <Text style={styles.loadingText}>
                 {loadingText}
               </Text>
             </View>
 
-            <View
-              style={
-                styles.progressTrack
-              }
-            >
+            <View style={styles.progressTrack}>
               <Animated.View
                 style={[
                   styles.progressFill,
                   {
-                    width:
-                      progressWidth,
+                    width: progressWidth,
                   },
                 ]}
               />
@@ -534,33 +450,24 @@ export default function SplashScreen({
           </>
         ) : (
           <>
-            <Text
-              style={
-                styles.errorText
-              }
-            >
+            <Text style={styles.errorText}>
               {loadingText}
             </Text>
 
-            <Animated.View
-              style={
-                styles.retryButton
-              }
+            <Pressable
+              style={({ pressed }) => [
+                styles.retryButton,
+                pressed && styles.retryPressed,
+              ]}
+              onPress={handleRetry}
             >
-              <Text
-                style={
-                  styles.retryText
-                }
-                onPress={
-                  handleRetry
-                }
-              >
+              <Text style={styles.retryText}>
                 Try Again
               </Text>
-            </Animated.View>
+            </Pressable>
           </>
         )}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -568,237 +475,111 @@ export default function SplashScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor:
-      '#FFFFFF',
-    alignItems: 'center',
-    justifyContent:
-      'center',
+    backgroundColor: '#D6E8FF',
     overflow: 'hidden',
   },
 
   /* ================= BRAND ================= */
 
   brand: {
-    alignItems:
-      'center',
-    marginBottom: 25,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
 
   header: {
-    flexDirection:
-      'row',
-    alignItems:
-      'center',
-    justifyContent:
-      'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 14,
   },
 
   logo: {
     width: 105,
     height: 38,
-    marginLeft:-40
+    marginLeft: -40,
   },
 
   brandName: {
     marginLeft: -28,
     fontSize: 24,
     fontWeight: '900',
-    color:
-      colors.navy,
-    letterSpacing:
-      -0.5,
+    color: colors.navy,
+    letterSpacing: -0.5,
   },
 
   tagline: {
     marginTop: 5,
     fontSize: 13,
     lineHeight: 19,
-    color:
-      '#64748B',
-    textAlign:
-      'center',
+    color: '#4A5E80',
+    textAlign: 'center',
     fontWeight: '600',
-  },
-
-  /* ================= SCENE ================= */
-
-  scene: {
-    width: '100%',
-    height: 180,
-    position:
-      'relative',
-    overflow:
-      'hidden',
-    backgroundColor:
-      '#F2F7FD',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor:
-      '#E2EBF7',
-    alignItems:
-      'center',
-    justifyContent:
-      'flex-end',
-  },
-
-  skyGlow: {
-    position:
-      'absolute',
-    width: 230,
-    height: 110,
-    borderRadius: 100,
-    backgroundColor:
-      '#E7F1FF',
-    top: 10,
-    alignSelf:
-      'center',
-  },
-
-  cloud: {
-    position:
-      'absolute',
-    height: 18,
-    borderRadius: 20,
-    backgroundColor:
-      'rgba(255,255,255,0.85)',
-  },
-
-  cloudOne: {
-    width: 65,
-    top: 38,
-    left: 8,
-  },
-
-  cloudTwo: {
-    width: 45,
-    top: 65,
-    right: 14,
-  },
-
-  hillBack: {
-    position:
-      'absolute',
-    width: 260,
-    height: 95,
-    borderRadius: 130,
-    backgroundColor:
-      '#DDECFB',
-    bottom: 38,
-    left: -85,
-  },
-
-  hillFront: {
-    position:
-      'absolute',
-    width: 300,
-    height: 80,
-    borderRadius: 150,
-    backgroundColor:
-      '#D4E7F9',
-    bottom: 28,
-    right: -100,
-  },
-
-  road: {
-    position:
-      'absolute',
-    width: '120%',
-    height: 52,
-    bottom: 0,
-    backgroundColor:
-      '#E7EEF7',
-  },
-
-  roadMarks: {
-    position:
-      'absolute',
-    bottom: 22,
-    width: '100%',
-    flexDirection:
-      'row',
-    justifyContent:
-      'space-around',
-    paddingHorizontal: 8,
-  },
-
-  roadMark: {
-    width: 34,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor:
-      '#B9C9DC',
   },
 
   /* ================= LOADING ================= */
 
   loadingArea: {
-    alignItems:
-      'center',
-    marginTop: 18,
-    minHeight: 42,
-    justifyContent:
-      'center',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
   },
 
   loaderRow: {
-    flexDirection:
-      'row',
-    alignItems:
-      'center',
-    justifyContent:
-      'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   progressTrack: {
-    width: 145,
-    height: 4,
+    width: 170,
+    height: 5,
     borderRadius: 10,
-    backgroundColor:
-      '#E1E8F1',
-    overflow:
-      'hidden',
-    marginTop: 9,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    overflow: 'hidden',
+    marginTop: 10,
   },
 
   progressFill: {
     height: '100%',
     borderRadius: 10,
-    backgroundColor:
-      colors.blue,
+    backgroundColor: '#FFFFFF',
   },
 
   loadingText: {
     marginLeft: 8,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.7,
-    color:
-      '#8A98AD',
+    color: '#D5E3FA',
   },
 
   errorText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    color:
-      '#8A98AD',
-    textAlign:
-      'center',
+    color: '#E4EDFB',
+    textAlign: 'center',
   },
 
   retryButton: {
-    marginTop: 7,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor:
-      '#EEF5FF',
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+
+  retryPressed: {
+    opacity: 0.8,
   },
 
   retryText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
-    color:
-      colors.blue,
+    color: colors.blue,
   },
 });
