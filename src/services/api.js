@@ -1,9 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
 
-const BASE_URL = (
-  process.env.EXPO_PUBLIC_API_URL
-).replace(/\/$/, '');
+const RAW_URL = process.env.EXPO_PUBLIC_API_URL || '';
+const BASE_URL = RAW_URL.replace(/\/$/, '');
 
 export async function api(path, options = {}) {
   const token = await AsyncStorage.getItem('authToken');
