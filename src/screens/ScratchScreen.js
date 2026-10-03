@@ -9,20 +9,19 @@ import {
 } from 'react-native';
 
 import {
-  Bell,
   CarFront,
   Check,
   Gift,
   LogOut,
   RotateCcw,
   Sparkles,
-  Trophy,
   UserRound,
   UsersRound,
   Wallet,
 } from 'lucide-react-native';
 
 import Screen from '../components/Screen';
+import ScratchCard from '../components/ScratchCard';
 
 import {
   policyApi,
@@ -37,69 +36,85 @@ export default function ScratchScreen({
 }) {
   const [user, setUser] = useState(null);
   const [card, setCard] = useState(null);
-const [totalReward, setTotalReward] = useState(0);
-const [loading, setLoading] = useState(true);
-const [scratching, setScratching] = useState(false);
+  const [totalReward, setTotalReward] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [scratching, setScratching] = useState(false);
+  const [hasPastRewards, setHasPastRewards] = useState(false);
+
+  // API fail hone par foil dobara lagane ke liye
+  const [cardKey, setCardKey] = useState(0);
 
   useEffect(() => {
     loadReward();
   }, []);
 
-const loadReward = async () => {
-  setLoading(true);
+  /* ================================================= */
+  /* TOTAL REWARD                                      */
+  /* Sirf SCRATCH ho chuke cards ka total               */
+  /* ================================================= */
 
-  try {
-    const userResponse = await userApi.me();
+  const refreshTotal = async () => {
+    try {
+      const history = await policyApi.history();
+      const cards = history?.cards || [];
 
-    setUser(userResponse?.user || null);
-
-    const [currentCardResult, historyResult] =
-      await Promise.allSettled([
-        policyApi.myScratchCard(),
-        policyApi.history(),
-      ]);
-
-    // ================= CURRENT SCRATCH CARD =================
-
-    if (currentCardResult.status === 'fulfilled') {
-      setCard(
-        currentCardResult.value?.card || null
+      setTotalReward(calculateTotal(cards));
+      setHasPastRewards(cards.some(isCardScratched));
+    } catch (error) {
+      console.log(
+        'History error:',
+        error?.message
       );
-    } else if (
-      currentCardResult.reason?.status === 404
-    ) {
-      setCard(null);
-    } else {
-      throw currentCardResult.reason;
     }
+  };
 
-    // ================= TOTAL REWARD =================
+  const loadReward = async () => {
+    setLoading(true);
 
-    if (historyResult.status === 'fulfilled') {
-      const cards =
-        historyResult.value?.cards || [];
+    try {
+      const userResponse = await userApi.me();
 
-      const total = cards.reduce(
-        (sum, item) =>
-          sum + Number(item?.amount || 0),
-        0
+      setUser(userResponse?.user || null);
+
+      const [currentCardResult, historyResult] =
+        await Promise.allSettled([
+          policyApi.myScratchCard(),
+          policyApi.history(),
+        ]);
+
+      // ================= CURRENT SCRATCH CARD =================
+
+      if (currentCardResult.status === 'fulfilled') {
+        setCard(
+          currentCardResult.value?.card || null
+        );
+      } else if (
+        currentCardResult.reason?.status === 404
+      ) {
+        setCard(null);
+      } else {
+        throw currentCardResult.reason;
+      }
+
+      // ================= TOTAL REWARD =================
+
+      if (historyResult.status === 'fulfilled') {
+        const cards = historyResult.value?.cards || [];
+
+        setTotalReward(calculateTotal(cards));
+        setHasPastRewards(cards.some(isCardScratched));
+      } else {
+        setTotalReward(0);
+      }
+    } catch (error) {
+      Alert.alert(
+        'Unable to load rewards',
+        error?.message || 'Please try again.'
       );
-
-      setTotalReward(total);
-    } else {
-      setTotalReward(0);
+    } finally {
+      setLoading(false);
     }
-
-  } catch (error) {
-    Alert.alert(
-      'Unable to load rewards',
-      error?.message ||
-        'Please try again.'
-    );
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   /* ================================================= */
   /* LOGOUT */
@@ -115,45 +130,56 @@ const loadReward = async () => {
   };
 
   /* ================================================= */
-  /* SCRATCH */
+  /* SCRATCH                                           */
+  /* Card scratch hone ke baad hi API call hoti hai    */
   /* ================================================= */
 
-  const handleScratch = async () => {
-  if (scratching) return;
+  const handleReveal = async () => {
+    if (scratching) return;
 
-  setScratching(true);
+    setScratching(true);
 
-  try {
-    const result = await policyApi.scratch();
+    try {
+      const result = await policyApi.scratch();
 
-    if (result?.card) {
-      setCard(result.card);
+      if (result?.card) {
+        setCard(result.card);
+      } else {
+        // Server ne card nahi bheja to local me scratched mark karo
+        setCard((prev) =>
+          prev
+            ? {
+                ...prev,
+                isScratched: true,
+                status: 'scratched',
+              }
+            : prev
+        );
+      }
+
+      // Ab total badhega (history se, scratched cards ka)
+      await refreshTotal();
+    } catch (error) {
+      // Foil wapas laga do, user dobara try kar sake
+      setCardKey((key) => key + 1);
+
+      Alert.alert(
+        'Reward unavailable',
+        error?.message ||
+          'Your reward is not available yet.'
+      );
+    } finally {
+      setScratching(false);
     }
-
-    // Scratch ke baad total reward recalculate karo
-    await loadReward();
-
-  } catch (error) {
-    Alert.alert(
-      'Reward unavailable',
-      error?.message ||
-        'Your reward is not available yet.'
-    );
-  } finally {
-    setScratching(false);
-  }
-};
-
+  };
 
   /* ================================================= */
   /* REWARD DATA */
   /* ================================================= */
 
   const rewardAmount = getRewardAmount(card);
-const totalAmount = totalReward;
-  const isIssued = isCardIssued(card);
-
   const isScratched = isCardScratched(card);
+  const isIssued = isCardIssued(card) || isScratched;
 
   /* ================================================= */
   /* SCREEN */
@@ -164,7 +190,6 @@ const totalAmount = totalReward;
       contentStyle={styles.content}
       footer={
         <View style={styles.bottomNav}>
-
           <NavItem
             icon={<CarFront size={21} />}
             label="Home"
@@ -187,24 +212,21 @@ const totalAmount = totalReward;
             }
           />
 
-<NavItem
-  icon={<UserRound size={21} />}
-  label="Profile"
-  onPress={() =>
-    navigation.navigate('Profile')
-  }
-/>
-
+          <NavItem
+            icon={<UserRound size={21} />}
+            label="Profile"
+            onPress={() =>
+              navigation.navigate('Profile')
+            }
+          />
         </View>
       }
     >
-
       {/* ================================================= */}
       {/* HEADER */}
       {/* ================================================= */}
 
       <View style={styles.top}>
-
         <View style={styles.greeting}>
           <Text style={styles.hello}>
             Welcome Back!
@@ -221,13 +243,6 @@ const totalAmount = totalReward;
         </View>
 
         <View style={styles.topActions}>
-
-          {/* Notification */}
-
-          
-
-          {/* Logout */}
-
           <Pressable
             style={({ pressed }) => [
               styles.topAction,
@@ -241,32 +256,26 @@ const totalAmount = totalReward;
               color={colors.danger}
             />
           </Pressable>
-
         </View>
       </View>
 
-
-
       {/* ================================================= */}
-      {/* TOTAL REWARD */}
+      {/* TOTAL REWARD (sirf scratched rewards)             */}
       {/* ================================================= */}
 
       <View style={styles.totalCard}>
-
         <View style={styles.totalCopy}>
-
           <Text style={styles.totalLabel}>
             TOTAL REWARD
           </Text>
 
           <Text style={styles.totalAmount}>
-  ₹{totalAmount}
-</Text>
+            ₹{totalReward}
+          </Text>
 
           <Text style={styles.totalSub}>
             Cashback earned from your insurance
           </Text>
-
         </View>
 
         <View style={styles.walletCircle}>
@@ -275,189 +284,100 @@ const totalAmount = totalReward;
             color={colors.white}
           />
         </View>
-
       </View>
 
       {/* ================================================= */}
-      {/* MAIN REWARD */}
+      {/* MAIN REWARD                                       */}
       {/* ================================================= */}
 
       <View style={styles.rewardSection}>
+        {isIssued ? (
+          <>
+            <ScratchCard
+              key={cardKey}
+              amount={rewardAmount}
+              revealed={isScratched}
+              onReveal={handleReveal}
+            />
 
-        <View style={styles.rewardGlow}>
+            {!isScratched && (
+              <View style={styles.availableInfo}>
+                <Sparkles
+                  size={17}
+                  color={colors.orange}
+                />
 
-          <View style={styles.rewardCircle}>
-
-            {isScratched ? (
-              <>
-                <View style={styles.rewardIconSuccess}>
-                  <Trophy
-                    size={31}
-                    color={colors.orange}
-                  />
-                </View>
-
-                <Text style={styles.rewardWon}>
-                  ₹{rewardAmount}
+                <Text style={styles.availableText}>
+                  {scratching
+                    ? 'Revealing your reward...'
+                    : 'Scratch the card to reveal your cashback'}
                 </Text>
-
-                <Text style={styles.rewardWonLabel}>
-                  Reward Received
-                </Text>
-              </>
-            ) : isIssued ? (
-              <>
-                <View style={styles.rewardIconAvailable}>
-                  <Gift
-                    size={34}
-                    color={colors.orange}
-                  />
-                </View>
-
-                <Text
-                  style={styles.rewardCenterTitle}
-                >
-                  Scratch & Reveal
-                </Text>
-
-                <Text
-                  style={styles.rewardCenterSub}
-                >
-                  Your cashback is waiting
-                </Text>
-              </>
-            ) : (
-              <>
-                <View style={styles.rewardIconPending}>
-                  <Gift
-                    size={34}
-                    color="#9AA7B8"
-                  />
-                </View>
-
-                <Text
-                  style={styles.rewardCenterTitle}
-                >
-                  Reward Pending
-                </Text>
-
-                <Text
-                  style={styles.rewardCenterSub}
-                >
-                  Your reward will appear here
-                </Text>
-              </>
+              </View>
             )}
 
-          </View>
+            {isScratched && (
+              <View style={styles.receivedBox}>
+                <View style={styles.receivedIcon}>
+                  <Check
+                    size={17}
+                    color={colors.success}
+                    strokeWidth={3}
+                  />
+                </View>
 
-        </View>
+                <View style={styles.receivedCopy}>
+                  <Text style={styles.receivedTitle}>
+                    Reward revealed
+                  </Text>
 
-        {/* ================================================= */}
-        {/* PENDING MESSAGE */}
-        {/* ================================================= */}
-
-        {!isIssued && !isScratched && (
-          <View style={styles.messageBox}>
-
-            <View style={styles.messageIcon}>
-              <Sparkles
-                size={18}
-                color={colors.orange}
-              />
+                  <Text style={styles.receivedText}>
+                    Your ₹{rewardAmount} cashback
+                    reward has been successfully
+                    revealed.
+                  </Text>
+                </View>
+              </View>
+            )}
+          </>
+        ) : (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyGlow}>
+              <View style={styles.emptyIcon}>
+                {hasPastRewards ? (
+                  <Check
+                    size={34}
+                    color={colors.success}
+                    strokeWidth={3}
+                  />
+                ) : (
+                  <Gift
+                    size={34}
+                    color={colors.blue}
+                  />
+                )}
+              </View>
             </View>
 
-            <View style={styles.messageCopy}>
+            <Text style={styles.emptyTitle}>
+              {hasPastRewards
+                ? "You're all caught up!"
+                : 'No scratch card yet'}
+            </Text>
 
-              <Text style={styles.messageTitle}>
-                Reward pending
-              </Text>
+            <Text style={styles.emptyText}>
+              {hasPastRewards
+                ? 'You have no scratch cards to open right now. Whenever a new cashback reward is issued for you, it will show up here.'
+                : 'You don\u2019t have any scratch card at the moment. Once your policy is verified and your cashback is issued, your scratch card will appear right here.'}
+            </Text>
 
-              <Text style={styles.messageText}>
-                Your scratch card has not been issued
-                yet. Once the admin issues your cashback
-                reward, it will appear here.
-              </Text>
-
-            </View>
-
-          </View>
-        )}
-
-        {/* ================================================= */}
-        {/* AVAILABLE REWARD */}
-        {/* ================================================= */}
-
-        {isIssued && !isScratched && (
-          <View style={styles.availableArea}>
-
-            <View style={styles.availableInfo}>
-              <Sparkles
-                size={17}
-                color={colors.orange}
-              />
-
-              <Text style={styles.availableText}>
-                Your cashback reward is ready to reveal
+            <View style={styles.emptyTip}>
+            
+              <Text style={styles.emptyTipText}>
+                Check back soon or tap refresh below
               </Text>
             </View>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.scratchButton,
-                pressed && styles.pressedButton,
-              ]}
-              onPress={handleScratch}
-              disabled={scratching}
-            >
-
-              <Gift
-                size={19}
-                color={colors.white}
-              />
-
-              <Text style={styles.scratchButtonText}>
-                {scratching
-                  ? 'Revealing...'
-                  : 'Scratch & Reveal Reward'}
-              </Text>
-
-            </Pressable>
-
           </View>
         )}
-
-        {/* ================================================= */}
-        {/* SCRATCHED / RECEIVED */}
-        {/* ================================================= */}
-
-        {isScratched && (
-          <View style={styles.receivedBox}>
-
-            <View style={styles.receivedIcon}>
-              <Check
-                size={17}
-                color={colors.success}
-                strokeWidth={3}
-              />
-            </View>
-
-            <View style={styles.receivedCopy}>
-
-              <Text style={styles.receivedTitle}>
-                Reward revealed
-              </Text>
-
-              <Text style={styles.receivedText}>
-                Your ₹{rewardAmount} cashback reward
-                has been successfully revealed.
-              </Text>
-
-            </View>
-
-          </View>
-        )}
-
       </View>
 
       {/* ================================================= */}
@@ -472,7 +392,6 @@ const totalAmount = totalReward;
         onPress={loadReward}
         disabled={loading}
       >
-
         <RotateCcw
           size={15}
           color={colors.blue}
@@ -483,54 +402,8 @@ const totalAmount = totalReward;
             ? 'Refreshing...'
             : 'Refresh reward status'}
         </Text>
-
       </Pressable>
-
     </Screen>
-  );
-}
-
-/* ================================================= */
-/* REWARD LEVEL */
-/* ================================================= */
-
-function RewardLevel({
-  amount,
-  active,
-}) {
-  return (
-    <View
-      style={[
-        styles.levelItem,
-        active && styles.levelItemActive,
-      ]}
-    >
-
-      <View
-        style={[
-          styles.levelCircle,
-          active && styles.levelCircleActive,
-        ]}
-      >
-        {active && (
-          <Check
-            size={14}
-            color={colors.white}
-            strokeWidth={3}
-          />
-        )}
-      </View>
-
-      <Text
-        style={[
-          styles.levelAmount,
-          active && styles.levelAmountActive,
-        ]}
-      >
-        {amount}
-      </Text>
-
-    </View>
   );
 }
 
@@ -552,7 +425,6 @@ function NavItem({
         pressed && styles.navPressed,
       ]}
     >
-
       {React.cloneElement(icon, {
         color: active
           ? colors.blue
@@ -567,7 +439,6 @@ function NavItem({
       >
         {label}
       </Text>
-
     </Pressable>
   );
 }
@@ -611,14 +482,21 @@ function isCardScratched(card) {
   );
 }
 
+// Total me sirf wahi cards jo scratch ho chuke hain
+function calculateTotal(cards) {
+  return cards
+    .filter(isCardScratched)
+    .reduce(
+      (sum, item) => sum + getRewardAmount(item),
+      0
+    );
+}
+
 /* ================================================= */
 /* STYLES */
 /* ================================================= */
 
 const styles = StyleSheet.create({
-
-  /* ================= CONTENT ================= */
-
   content: {
     paddingTop: 18,
   },
@@ -673,54 +551,7 @@ const styles = StyleSheet.create({
 
   pressed: {
     opacity: 0.7,
-    transform: [
-      {
-        scale: 0.96,
-      },
-    ],
-  },
-
-  /* ================= PAGE TITLE ================= */
-
-  pageTitle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
-
-  titleCopy: {
-    flex: 1,
-  },
-
-  pageKicker: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: colors.blue,
-    letterSpacing: 1.2,
-  },
-
-  title: {
-    fontSize: 25,
-    fontWeight: '900',
-    color: colors.navy,
-    marginTop: 2,
-  },
-
-  subtitle: {
-    fontSize: 10.5,
-    color: colors.muted,
-    marginTop: 3,
-  },
-
-  titleIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: '#FFF4E7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 10,
+    transform: [{ scale: 0.96 }],
   },
 
   /* ================= TOTAL CARD ================= */
@@ -733,7 +564,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 18,
   },
 
   totalCopy: {
@@ -770,90 +601,6 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
 
-  /* ================= LEVEL CARD ================= */
-
-  levelCard: {
-    backgroundColor: colors.white,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 15,
-    marginBottom: 17,
-  },
-
-  levelHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-
-  levelTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: colors.navy,
-  },
-
-  levelHint: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.muted,
-  },
-
-  levels: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  levelItem: {
-    alignItems: 'center',
-    minWidth: 52,
-  },
-
-  levelItemActive: {
-    transform: [
-      {
-        scale: 1.04,
-      },
-    ],
-  },
-
-  levelCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#EEF2F6',
-    borderWidth: 1,
-    borderColor: '#D7DEE8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  levelCircleActive: {
-    backgroundColor: colors.blue,
-    borderColor: colors.blue,
-  },
-
-  levelAmount: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#8A96A8',
-    marginTop: 5,
-  },
-
-  levelAmountActive: {
-    color: colors.blue,
-    fontWeight: '900',
-  },
-
-  levelLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: '#E5EAF1',
-    marginHorizontal: 4,
-    marginBottom: 17,
-  },
-
   /* ================= REWARD ================= */
 
   rewardSection: {
@@ -861,168 +608,86 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  rewardGlow: {
-    width: 205,
-    height: 205,
-    borderRadius: 103,
+  /* ================= EMPTY STATE ================= */
+
+  emptyCard: {
+    width: '100%',
+    backgroundColor: colors.white,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 18,
+    alignItems: 'center',
+  },
+
+  emptyGlow: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: '#EEF4FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  rewardCircle: {
-    width: 165,
-    height: 165,
-    borderRadius: 83,
+  emptyIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: colors.white,
     borderWidth: 2,
-    borderColor: '#E7ECF3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-
-  rewardIconPending: {
-    width: 55,
-    height: 55,
-    borderRadius: 28,
-    backgroundColor: '#F1F3F6',
+    borderColor: '#DCE8FB',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  rewardIconAvailable: {
-    width: 55,
-    height: 55,
-    borderRadius: 28,
-    backgroundColor: '#FFF4E7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  rewardIconSuccess: {
-    width: 55,
-    height: 55,
-    borderRadius: 28,
-    backgroundColor: '#FFF4E7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  rewardCenterTitle: {
-    fontSize: 16,
+  emptyTitle: {
+    fontSize: 19,
     fontWeight: '900',
     color: colors.navy,
-    textAlign: 'center',
-    marginTop: 9,
+    marginTop: 16,
   },
 
-  rewardCenterSub: {
-    fontSize: 9.5,
-    lineHeight: 14,
+  emptyText: {
+    fontSize: 12.5,
+    lineHeight: 19,
     color: colors.muted,
     textAlign: 'center',
-    marginTop: 5,
-  },
-
-  rewardWon: {
-    fontSize: 29,
-    fontWeight: '900',
-    color: colors.navy,
     marginTop: 6,
   },
 
-  rewardWonLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.success,
-    marginTop: 2,
-  },
-
-  /* ================= PENDING ================= */
-
-  messageBox: {
-    width: '100%',
+  emptyTip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF8ED',
-    borderRadius: 15,
-    padding: 13,
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
     marginTop: 16,
+    gap: 7,
   },
 
-  messageIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: '#FFF0D9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  messageCopy: {
-    flex: 1,
-    marginLeft: 9,
-  },
-
-  messageTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: colors.navy,
-  },
-
-  messageText: {
-    fontSize: 9.5,
-    lineHeight: 15,
-    color: colors.muted,
-    marginTop: 3,
+  emptyTipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9A6A1E',
   },
 
   /* ================= AVAILABLE ================= */
-
-  availableArea: {
-    width: '100%',
-    marginTop: 16,
-  },
 
   availableInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginTop: 14,
   },
 
   availableText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.muted,
     marginLeft: 7,
-  },
-
-  scratchButton: {
-    width: '100%',
-    minHeight: 52,
-    borderRadius: 14,
-    backgroundColor: colors.blue,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-
-  scratchButtonText: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: colors.white,
-  },
-
-  pressedButton: {
-    opacity: 0.8,
-    transform: [
-      {
-        scale: 0.985,
-      },
-    ],
   },
 
   /* ================= RECEIVED ================= */
