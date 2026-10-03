@@ -129,10 +129,14 @@ export default function Screen({
 
   return (
     <ScreenScrollContext.Provider value={contextValue}>
-      <SafeAreaView
-        style={styles.safe}
-        edges={['top', 'left', 'right']}
-      >
+     <SafeAreaView
+  style={styles.safe}
+  edges={
+    footer
+      ? ['top', 'left', 'right']
+      : ['top', 'left', 'right', 'bottom']
+  }
+>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
